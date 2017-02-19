@@ -1,4 +1,7 @@
 import time
+
+import sys
+
 from linode import api
 from run_command import *
 import threading
@@ -32,7 +35,7 @@ IMAGE_LABEL = 'wrf-minimal'
 
 # Count time
 count_time = 1 * 60
-
+instance_thread_list = []
 # Script
 
 
@@ -130,7 +133,7 @@ class Process_Linode():
             self.reap(linodeId)
 
 
-def countdown(t):
+def countdown(t, linode_ids):
     """
     Counting time down
     """
@@ -142,18 +145,29 @@ def countdown(t):
         t -= 1
     print('Time is up.\n')
 
+    process_linode.multi_reap(linode_ids)
+
 
 def proceed_script(linode_ips):
     """
     Run the scripts after boot the instance.
     """
-    instance_thread_list = []
+    global instance_thread_list
     for index, linode_ip in enumerate(linode_ips):
         instance_thread = threading.Thread(target=run_script.run_main, args=(linode_ip, index))
         instance_thread.start()
         instance_thread_list.append(instance_thread)
-    for p in instance_thread_list:
-        p.join()
+
+
+def terminal_thread(t, linode_ips, linode_ids):
+    """
+    Terminate the Instances when time down is up.
+    """
+    countdown_thread = threading.Thread(target=countdown, args=(t, linode_ids))
+    countdown_thread.start()
+    proceed_script(linode_ips)
+    countdown_thread.join()
+
 
 if __name__ == "__main__":
     process_linode = Process_Linode()
@@ -163,13 +177,10 @@ if __name__ == "__main__":
             linode_lists = process_linode.multi_init(10)
             time.sleep(30)
             linode_ips = process_linode.multi_boot(linode_lists)
-            time.sleep(20)
-            proceed_script(linode_ips)
-
-            countdown(count_time)
-            process_linode.multi_reap(linode_lists)
             time.sleep(10)
-
+            terminal_thread(count_time, linode_ips, linode_lists)
+            sys.exit(0)
+            print("End Successfully.")
         else:
             print('No found Image on your account\n')
 
